@@ -1,0 +1,13 @@
+# ChromaDB persistent store — large binary files, generated locally
+data/chroma/
+
+# Help Center source documents — added manually, not committed
+data/help_center/
+
+# Local environment config
+.env
+
+# Python cache
+__pycache__/
+*.pyc
+.venv/
