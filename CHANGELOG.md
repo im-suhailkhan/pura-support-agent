@@ -43,7 +43,34 @@ Naming convention: `{product}-{topic}.md` (e.g. `pura-3-troubleshooting.md`).
 
 > Note: 4 placeholder articles remain (`fragrance-subscription.md`, `how-to-use-the-pura-diffuser.md`, `returns-and-refunds.md`, `troubleshooting-connectivity.md`) — superseded by product-specific files; safe to delete.
 
+#### Streaming Chat UI (CAP-2.S-1 + CAP-2.S-2 — SUH-6)
+
+- `frontend/` — React + Vite + TypeScript project scaffolded with Tailwind CSS v4 (`@tailwindcss/vite`)
+
+- `frontend/src/components/ChatWidget.tsx` — main chat panel
+  - Fixed 420×600px card layout: purple header, scrollable message list, pinned input row
+  - Empty state: `"Hi! Ask me anything about your Pura."`
+  - Input focused on mount; Enter submits, Shift+Enter inserts newline
+  - Input + Send button disabled while streaming; re-enabled on completion
+  - Auto-scrolls to latest message on every state update
+
+- `frontend/src/components/MessageBubble.tsx` — single message bubble
+  - User messages: right-aligned, purple background
+  - Agent messages: left-aligned, white card with border
+
+- `frontend/src/hooks/useChat.ts` — all message state and streaming logic
+  - `sendMessage(text)`: appends user message immediately, then fetches `POST /chat`
+  - Reads response body as `ReadableStream`; updates agent bubble in-place per chunk (no new bubble per token)
+  - On error: sets agent message to `"Something went wrong. Please try again."`
+
+- `backend/main.py` — FastAPI server (mock phase; replaced in CAP-3.S-1)
+  - `POST /chat` accepts `{ message: string }`, streams a fixed response word-by-word at ~40ms/token
+  - CORS open for `http://localhost:5173`
+  - Run: `uvicorn main:app --reload`
+
+- `backend/requirements.txt` — added `fastapi`, `uvicorn[standard]`
+
 #### Plans
 
 - `docs/plans/suh-5-ingest-plan.md` — completed (100%)
-- `docs/plans/suh-6-streaming-chat-plan.md` — plan for CAP-2.S-2: streaming chat UI + mock backend stub
+- `docs/plans/suh-6-streaming-chat-plan.md` — completed (95% — pending browser sign-off)
