@@ -1,24 +1,37 @@
 """
 main.py — Pura Support Agent: FastAPI backend
 
-Phase 1 / CAP-3.S-1 will replace the mock stream below with a real Groq
-LLM + ChromaDB RAG pipeline. For now, POST /chat returns a fake chunked
-response word-by-word so the frontend streaming logic can be fully validated
-without an LLM API key.
+CAP-3.S-1: POST /chat now streams a real response from Groq (llama-3.3-70b-versatile).
+The frontend (useChat.ts) is unchanged — it consumes any text/plain chunked stream.
+
+Next:
+  CAP-3.S-2 — inject top-3 ChromaDB chunks as context before the LLM call
+  CAP-3.S-3 — include last N conversation turns for memory
 
 Run:
     uvicorn main:app --reload
 """
 
-import asyncio
+import os
+import sys
+
+import groq as groq_lib
+from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from groq import AsyncGroq
 from pydantic import BaseModel
+
+load_dotenv()
+
+_api_key = os.getenv("GROQ_API_KEY")
+if not _api_key:
+    print("[error] GROQ_API_KEY is not set. Add it to backend/.env", file=sys.stderr)
+    sys.exit(1)
 
 app = FastAPI(title="Pura Support Agent")
 
-# Allow the Vite dev server to reach this API
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173"],
@@ -26,39 +39,54 @@ app.add_middleware(
     allow_headers=["Content-Type"],
 )
 
+client = AsyncGroq(api_key=_api_key)
+
+MODEL = "llama-3.3-70b-versatile"
+
+# Minimal brand prompt for CAP-3.S-1.
+# RAG context (retrieved Help Center chunks) is injected here in CAP-3.S-2.
+SYSTEM_PROMPT = (
+    "You are a friendly, knowledgeable support agent for Pura, a premium smart home "
+    "fragrance brand. Help customers with questions about their Pura devices "
+    "(Pura Mini, Pura Plus, Pura 3, Pura Car Pro, Pura Car), fragrance vials, "
+    "setup, troubleshooting, and general product information. "
+    "Be warm, concise, and solution-focused — like a Pura brand expert, not a generic bot. "
+    "If a question is unrelated to Pura products, politely say: "
+    "'I'm here to help with Pura products only. Is there something about your device or fragrance I can assist with?'"
+)
+
 
 class ChatRequest(BaseModel):
     message: str
 
 
-# --- Mock streaming response (replaced in CAP-3.S-1) ---
+async def stream_groq_response(message: str):
+    """Stream a Groq LLM response token-by-token.
 
-MOCK_RESPONSE = (
-    "Thanks for reaching out! I can help you with that. "
-    "Please make sure your Pura device is plugged in and within range of your 2.4 GHz Wi-Fi network. "
-    "Open the Pura app, tap 'Add Device', and follow the on-screen steps. "
-    "Let me know if you run into any issues!"
-)
-
-
-async def stream_mock_response(message: str):
-    """Yield the mock response one word at a time with a short delay.
-
-    The `message` parameter is accepted so the signature matches what
-    the real Groq pipeline will expect in CAP-3.S-1.
+    Yields raw text chunks as they arrive from the API.
+    On API error, yields a user-facing message and exits cleanly
+    so the frontend always receives a complete (if brief) response.
     """
-    _ = message  # will be used in CAP-3.S-1
-    words = MOCK_RESPONSE.split(" ")
-    for i, word in enumerate(words):
-        # Re-join with space except before the first word
-        chunk = word if i == 0 else f" {word}"
-        yield chunk
-        await asyncio.sleep(0.04)  # ~25 tokens/sec — realistic streaming feel
+    try:
+        stream = await client.chat.completions.create(
+            model=MODEL,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": message},
+            ],
+            stream=True,
+        )
+        async for chunk in stream:
+            token = chunk.choices[0].delta.content or ""
+            if token:
+                yield token
+    except groq_lib.APIError as e:
+        yield f"Something went wrong. Please try again. ({type(e).__name__})"
 
 
 @app.post("/chat")
 async def chat(request: ChatRequest) -> StreamingResponse:
     return StreamingResponse(
-        stream_mock_response(request.message),
+        stream_groq_response(request.message),
         media_type="text/plain",
     )

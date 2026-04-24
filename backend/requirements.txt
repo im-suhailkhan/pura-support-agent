@@ -6,3 +6,4 @@ sentence-transformers
 python-dotenv
 fastapi
 uvicorn[standard]
+groq
