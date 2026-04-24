@@ -1,9 +1,9 @@
 """
 main.py — Pura Support Agent: FastAPI backend
 
-CAP-3.S-3: POST /chat now accepts an optional conversation history and
-includes the last MAX_HISTORY_TURNS turns in the Groq messages list so
-the agent can resolve follow-up questions without the user repeating context.
+CAP-5.S-1/S-2: BASE_PROMPT now includes escalation detection and transcript
+generation. CAP-6.S-1: every turn logged to SQLite (db.py) after the stream
+closes — non-blocking.
 
 Run:
     uvicorn main:app --reload
@@ -20,7 +20,8 @@ from fastapi.responses import StreamingResponse
 from groq import AsyncGroq
 from pydantic import BaseModel
 
-from retrieval import retrieve  # SUH-7: validated at 8/10 accuracy, ~90ms avg
+from db import log_turn          # SUH-16: SQLite conversation logging
+from retrieval import retrieve   # SUH-7: validated at 8/10 accuracy, ~90ms avg
 
 load_dotenv()
 
@@ -82,7 +83,35 @@ Recognised troubleshooting categories (detect these automatically):
 - Device not detected / pairing failures (app can't find device, Bluetooth issues)
 - No scent or weak scent (not diffusing, vial seems empty, intensity too low)
 - LED light abnormalities (blinking red, solid red, light not responding)
-- Battery or power issues (Pura Car Pro / Pura Car: won't charge, drains fast, won't turn on)"""
+- Battery or power issues (Pura Car Pro / Pura Car: won't charge, drains fast, won't turn on)
+
+## Escalation
+
+Offer to escalate to the Pura human support team in these situations:
+
+1. **Immediate escalation** — if the customer says any of the following (or close variants):
+   "that didn't help", "still not working", "nothing is working", "I give up",
+   "I want to talk to a person", "speak to a human", "contact support", "talk to an agent"
+   → Respond immediately with the escalation message below.
+
+2. **Proactive escalation** — if the conversation history shows 2 or more exchanges
+   about the same unresolved issue without a successful resolution, proactively offer
+   to escalate rather than attempting another answer.
+
+**Escalation message and transcript:**
+When escalating, respond with EXACTLY this format (fill in the blanks from the conversation):
+
+I wasn't able to resolve this — would you like me to connect you with the Pura support team?
+
+---
+Support Summary
+Issue: <one-line summary of the customer's original problem>
+Steps tried: <bullet list of troubleshooting steps attempted in this conversation>
+Status: Unresolved
+Contact: support@pura.com or pura.com/help
+---
+
+Do not add any text after the closing `---`."""
 
 
 def build_system_prompt(chunks: list[dict]) -> str:
@@ -125,24 +154,34 @@ class HistoryItem(BaseModel):
 
 class ChatRequest(BaseModel):
     message: str
-    history: list[HistoryItem] | None = None  # optional — omitting keeps single-turn curl tests valid
+    history: list[HistoryItem] | None = None      # optional — single-turn curl tests still work
+    session_id: str | None = None                 # UUID from frontend; None = logging skipped
 
 
-async def stream_groq_response(message: str, history: list[HistoryItem]):
-    """Retrieve Help Center context, prepend conversation history, stream Groq response.
+async def stream_groq_response(
+    message: str,
+    history: list[HistoryItem],
+    session_id: str | None,
+):
+    """Retrieve Help Center context, prepend history, stream Groq response, then log to DB.
 
-    Messages sent to Groq: [system_with_context, ...last N history turns, current user message]
+    Flow:
+    1. RAG retrieval + context-aware system prompt.
+    2. Build Groq messages: [system, ...last N history, user].
+    3. Stream tokens to client; accumulate full response text.
+    4. After stream closes (finally), log both turns to SQLite — never during streaming.
     """
     chunks = retrieve(message, top_k=3)
     relevant_chunks = [c for c in chunks if c["distance"] < RELEVANCE_THRESHOLD]
     system_prompt = build_system_prompt(relevant_chunks)
 
-    # Cap history to avoid unbounded token growth; backend is the safety net even
-    # if the frontend sends more turns than expected.
     history_messages = [
         {"role": h.role, "content": h.content}
         for h in history[-MAX_HISTORY_TURNS:]
     ]
+
+    # Accumulate agent response so we can log it after the stream closes
+    response_tokens: list[str] = []
 
     try:
         stream = await client.chat.completions.create(
@@ -157,14 +196,27 @@ async def stream_groq_response(message: str, history: list[HistoryItem]):
         async for chunk in stream:
             token = chunk.choices[0].delta.content or ""
             if token:
+                response_tokens.append(token)
                 yield token
     except groq_lib.APIError as e:
-        yield f"Something went wrong. Please try again. ({type(e).__name__})"
+        error_msg = f"Something went wrong. Please try again. ({type(e).__name__})"
+        response_tokens.append(error_msg)
+        yield error_msg
+    finally:
+        # Write both turns after the stream closes — non-blocking from the user's perspective
+        if session_id:
+            agent_response = "".join(response_tokens)
+            log_turn(session_id, "user", message)
+            log_turn(session_id, "agent", agent_response)
 
 
 @app.post("/chat")
 async def chat(request: ChatRequest) -> StreamingResponse:
     return StreamingResponse(
-        stream_groq_response(request.message, request.history or []),
+        stream_groq_response(
+            request.message,
+            request.history or [],
+            request.session_id,
+        ),
         media_type="text/plain",
     )

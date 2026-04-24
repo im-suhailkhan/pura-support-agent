@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 
 export interface Message {
   id: string
@@ -35,6 +35,10 @@ export function useChat(): UseChatReturn {
   const [messages, setMessages] = useState<Message[]>([])
   const [streaming, setStreaming] = useState(false)
 
+  // Stable session ID for the lifetime of this chat instance.
+  // crypto.randomUUID() is available in all modern browsers and in Node 14.17+.
+  const sessionId = useRef<string>(crypto.randomUUID())
+
   // messages is included in deps so the history snapshot is always fresh.
   // Re-creating sendMessage on each new message is acceptable — it's only
   // called via user interaction, not in a render hot path.
@@ -66,11 +70,15 @@ export function useChat(): UseChatReturn {
     setStreaming(true)
 
     try {
-      // 4. Include history so the backend can pass prior turns to Groq
+      // 4. Include history and session_id so the backend can log this turn
       const response = await fetch(BACKEND_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: text, history }),
+        body: JSON.stringify({
+          message: text,
+          history,
+          session_id: sessionId.current,
+        }),
       })
 
       if (!response.ok || !response.body) {
