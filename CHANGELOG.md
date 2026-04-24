@@ -112,11 +112,23 @@ Naming convention: `{product}-{topic}.md` (e.g. `pura-3-troubleshooting.md`).
   - Maps `"agent"` → `"assistant"` for Groq compatibility; strips internal `id` field; filters empty placeholders
   - Validated: 5-turn test — device context carried correctly across all turns (e.g. "How long does its battery last?" resolved to Pura Car Pro without re-stating the device)
 
+#### Troubleshooting Wizard Mode (CAP-4.S-1 — SUH-12)
+
+- `backend/main.py` — `BASE_PROMPT` extended with `## Troubleshooting Mode` instructions
+  - Detects troubleshooting intent from natural language: "won't connect", "not working", "blinking light", "no scent", "won't pair", "won't charge", and related phrases
+  - **Device-first rule**: if model is unknown, asks "Which Pura model do you have?" before any diagnosis
+  - **One-question rule**: asks at most one clarifying question before providing steps — prevents multi-question interrogation
+  - **Numbered steps**: once model and issue are clear, delivers concise numbered steps grounded in RAG context
+  - Covers 5 issue categories: Wi-Fi/connectivity, pairing/detection, no scent/weak scent, LED abnormalities, battery/power (Car Pro/Car)
+  - Validated: 5/5 categories pass ≥4/5 accuracy gate; multi-turn wizard confirmed end-to-end in browser
+  - No new endpoints or frontend changes — prompt engineering only
+
 #### Plans
 
 - `docs/plans/suh-5-ingest-plan.md` — completed (100%)
-- `docs/plans/suh-6-streaming-chat-plan.md` — completed (95% — pending browser sign-off)
+- `docs/plans/suh-6-streaming-chat-plan.md` — completed (100%)
 - `docs/plans/suh-7-retrieval-plan.md` — completed (100%)
-- `docs/plans/suh-9-groq-streaming-plan.md` — completed (95% — pending browser sign-off)
-- `docs/plans/suh-10-rag-grounding-plan.md` — completed (95% — pending browser sign-off)
-- `docs/plans/suh-11-conversation-memory-plan.md` — completed (95% — pending browser sign-off)
+- `docs/plans/suh-9-groq-streaming-plan.md` — completed (100%)
+- `docs/plans/suh-10-rag-grounding-plan.md` — completed (100%)
+- `docs/plans/suh-11-conversation-memory-plan.md` — completed (100%)
+- `docs/plans/suh-12-troubleshooting-wizard-plan.md` — completed (100%)
