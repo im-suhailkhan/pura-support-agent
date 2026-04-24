@@ -1,12 +1,9 @@
 """
 main.py — Pura Support Agent: FastAPI backend
 
-CAP-3.S-2: POST /chat now retrieves top-3 relevant Help Center chunks from
-ChromaDB before calling Groq. Chunks are injected into the system prompt as
-a ### CONTEXT ### block, grounding the LLM in Pura's actual documentation.
-
-Next:
-  CAP-3.S-3 — include last N conversation turns for multi-turn memory
+CAP-3.S-3: POST /chat now accepts an optional conversation history and
+includes the last MAX_HISTORY_TURNS turns in the Groq messages list so
+the agent can resolve follow-up questions without the user repeating context.
 
 Run:
     uvicorn main:app --reload
@@ -44,6 +41,10 @@ app.add_middleware(
 client = AsyncGroq(api_key=_api_key)
 
 MODEL = "llama-3.3-70b-versatile"
+
+# Number of prior turns passed to Groq per request.
+# Caps token growth on Groq's free tier (6,000 tokens/min).
+MAX_HISTORY_TURNS = 6
 
 # Distances ≥ 1.0 indicate the chunk is too dissimilar to be useful context.
 # Calibrated from SUH-7: on-topic queries return ~0.5–0.8; off-topic ~1.17.
@@ -91,28 +92,38 @@ def build_system_prompt(chunks: list[dict]) -> str:
     )
 
 
+class HistoryItem(BaseModel):
+    role: str     # "user" or "assistant" (Groq-compatible values)
+    content: str
+
+
 class ChatRequest(BaseModel):
     message: str
+    history: list[HistoryItem] | None = None  # optional — omitting keeps single-turn curl tests valid
 
 
-async def stream_groq_response(message: str):
-    """Retrieve relevant Help Center chunks, then stream a grounded Groq response.
+async def stream_groq_response(message: str, history: list[HistoryItem]):
+    """Retrieve Help Center context, prepend conversation history, stream Groq response.
 
-    Flow:
-    1. Retrieve top-3 chunks from ChromaDB (retrieval.py).
-    2. Filter to chunks with distance < RELEVANCE_THRESHOLD.
-    3. Build a context-aware system prompt.
-    4. Stream Groq response token-by-token.
+    Messages sent to Groq: [system_with_context, ...last N history turns, current user message]
     """
     chunks = retrieve(message, top_k=3)
     relevant_chunks = [c for c in chunks if c["distance"] < RELEVANCE_THRESHOLD]
     system_prompt = build_system_prompt(relevant_chunks)
+
+    # Cap history to avoid unbounded token growth; backend is the safety net even
+    # if the frontend sends more turns than expected.
+    history_messages = [
+        {"role": h.role, "content": h.content}
+        for h in history[-MAX_HISTORY_TURNS:]
+    ]
 
     try:
         stream = await client.chat.completions.create(
             model=MODEL,
             messages=[
                 {"role": "system", "content": system_prompt},
+                *history_messages,
                 {"role": "user", "content": message},
             ],
             stream=True,
@@ -128,6 +139,6 @@ async def stream_groq_response(message: str):
 @app.post("/chat")
 async def chat(request: ChatRequest) -> StreamingResponse:
     return StreamingResponse(
-        stream_groq_response(request.message),
+        stream_groq_response(request.message, request.history or []),
         media_type="text/plain",
     )
