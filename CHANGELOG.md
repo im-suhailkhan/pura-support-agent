@@ -135,6 +135,43 @@ Naming convention: `{product}-{topic}.md` (e.g. `pura-3-troubleshooting.md`).
 
 - `.gitignore` — `backend/data/help_center/` removed from ignore list; KB articles are authored content and should be tracked. Only `backend/data/chroma/` (generated vector store) remains excluded. All 29 Help Center articles are now committed to the repo.
 
+#### Escalation Detection + Transcript (CAP-5.S-1 + CAP-5.S-2 — SUH-14 + SUH-15)
+
+- `backend/main.py` — `BASE_PROMPT` extended with `## Escalation` section
+  - **Immediate triggers**: "that didn't help", "still not working", "I want to talk to a person", "contact support", and close variants → escalates on the next response
+  - **Proactive escalation**: if 2+ prior turns on the same unresolved issue are in history, agent escalates rather than attempting another answer
+  - **Escalation message**: `"I wasn't able to resolve this — would you like me to connect you with the Pura support team?"`
+  - **Support Summary block** always included on escalation:
+    ```
+    ---
+    Support Summary
+    Issue: <one-line summary>
+    Steps tried: <bullet list>
+    Status: Unresolved
+    Contact: support@pura.com or pura.com/help
+    ---
+    ```
+
+#### Conversation Logging to SQLite (CAP-6.S-1 — SUH-16)
+
+- `backend/db.py` (new) — SQLite logging module
+  - `init_db()` — creates `conversations` table and parent directories on first import; no manual setup needed
+  - `log_turn(session_id, role, message)` — writes one row with ISO timestamp
+  - Schema: `id` (PK), `session_id`, `timestamp`, `role` ("user"|"agent"), `message`
+  - `DB_PATH` from env; default `./data/conversations.db`
+
+- `backend/main.py` — logging wired into the stream generator
+  - `ChatRequest` accepts optional `session_id: str | None`
+  - Response tokens accumulated during streaming; both user message and agent response logged in `finally` after stream closes — never during, so streaming is unblocked
+  - If `session_id` is absent, logging is silently skipped (backward-compatible)
+
+- `frontend/src/hooks/useChat.ts` — session ID generated on mount
+  - `sessionId = useRef(crypto.randomUUID())` — stable UUID for the conversation lifetime
+  - Sent as `session_id` in every `POST /chat` body
+
+- `backend/.env.example` — `DB_PATH=./data/conversations.db` added
+- `.gitignore` — `backend/data/conversations.db` excluded (generated file)
+
 #### Plans
 
 - `docs/plans/suh-5-ingest-plan.md` — completed (100%)
@@ -145,3 +182,4 @@ Naming convention: `{product}-{topic}.md` (e.g. `pura-3-troubleshooting.md`).
 - `docs/plans/suh-11-conversation-memory-plan.md` — completed (100%)
 - `docs/plans/suh-12-troubleshooting-wizard-plan.md` — completed (100%)
 - `docs/plans/suh-13-image-links-plan.md` — completed (100%)
+- `docs/plans/suh-14-15-16-escalation-logging-plan.md` — completed (100%)
