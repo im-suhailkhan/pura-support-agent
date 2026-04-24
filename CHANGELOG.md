@@ -123,6 +123,18 @@ Naming convention: `{product}-{topic}.md` (e.g. `pura-3-troubleshooting.md`).
   - Validated: 5/5 categories pass ≥4/5 accuracy gate; multi-turn wizard confirmed end-to-end in browser
   - No new endpoints or frontend changes — prompt engineering only
 
+#### Inline Image Links in Troubleshooting / Setup (CAP-4.S-3 — SUH-13)
+
+- `backend/data/help_center/pura-mini-setup.md` — setup overview diagram added
+- `backend/data/help_center/pura-mini-troubleshooting.md` — reset button image (inline with reset step) + LED indicator chart
+- `backend/data/help_center/pura-car-pro-setup.md` — setup overview diagram + charging port image
+- `backend/main.py` — prompt instruction added: LLM must include image markdown links verbatim inline with steps (without this instruction the LLM paraphrases them away)
+- **Note:** Current images are `placehold.co` placeholders — replace with real Pura asset URLs and re-run `python ingest.py` when available
+
+#### Changed
+
+- `.gitignore` — `backend/data/help_center/` removed from ignore list; KB articles are authored content and should be tracked. Only `backend/data/chroma/` (generated vector store) remains excluded. All 29 Help Center articles are now committed to the repo.
+
 #### Plans
 
 - `docs/plans/suh-5-ingest-plan.md` — completed (100%)
@@ -132,3 +144,4 @@ Naming convention: `{product}-{topic}.md` (e.g. `pura-3-troubleshooting.md`).
 - `docs/plans/suh-10-rag-grounding-plan.md` — completed (100%)
 - `docs/plans/suh-11-conversation-memory-plan.md` — completed (100%)
 - `docs/plans/suh-12-troubleshooting-wizard-plan.md` — completed (100%)
+- `docs/plans/suh-13-image-links-plan.md` — completed (100%)
