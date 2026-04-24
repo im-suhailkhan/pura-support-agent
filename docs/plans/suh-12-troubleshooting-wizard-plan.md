@@ -1,7 +1,7 @@
 # SUH-12 — Troubleshooting Wizard: Detect Intent → Guided Step-by-Step Flow
 
 **Linear:** SUH-12 / CAP-4.S-1
-**Overall Progress:** `95%`
+**Overall Progress:** `100% ✅`
 
 ## TLDR
 
@@ -30,7 +30,5 @@ Extend `BASE_PROMPT` in `backend/main.py` with troubleshooting wizard instructio
   - [x] ✅ Model-unknown path confirmed: "my pura device isn't working" → "Which Pura model do you have?" ✅
   - [x] ✅ Multi-turn wizard confirmed: "won't connect" → asks model → "Pura Mini" → numbered steps from `pura-mini-troubleshooting.md` ✅
 
-- [ ] 🟥 **Step 3: Browser smoke test**
-  - [ ] 🟥 Open `http://localhost:5173`, type "my device won't connect" — confirm agent asks which model
-  - [ ] 🟥 Reply with "Pura Mini" — confirm agent gives numbered steps
-  - [ ] 🟥 Confirm steps are grounded in `pura-mini-troubleshooting.md` content (2.4 GHz, reset, etc.)
+- [x] ✅ **Step 3: Browser smoke test**
+  - [x] ✅ Verified in browser — wizard flow works end-to-end ✅
