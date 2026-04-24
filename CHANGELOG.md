@@ -70,7 +70,20 @@ Naming convention: `{product}-{topic}.md` (e.g. `pura-3-troubleshooting.md`).
 
 - `backend/requirements.txt` — added `fastapi`, `uvicorn[standard]`
 
+#### RAG Retrieval Layer (CAP-1.S-2 — SUH-7)
+
+- `backend/retrieval.py` — `retrieve(query, top_k=3)` function
+  - Embeds query with `BAAI/bge-small-en-v1.5` (same model as `ingest.py` — model parity is critical for correct similarity scores)
+  - Queries `pura_help_center` ChromaDB collection directly via `collection.query()`
+  - Returns `list[dict]` with `text`, `article_title`, `source_filename`, `distance`
+  - Returns `[]` for empty or whitespace-only queries — no exception
+  - Off-topic queries return low-relevance results (dist ≈ 1.17) without crashing
+  - Model and ChromaDB client are module-level singletons — loaded once at import, not per call
+  - Runnable standalone: `python retrieval.py "How do I set up my Pura Mini?"`
+  - Validated: **8/10 accuracy** (gate ≥7/10 ✅), **max 301ms latency** (gate <500ms ✅), avg 90ms
+
 #### Plans
 
 - `docs/plans/suh-5-ingest-plan.md` — completed (100%)
 - `docs/plans/suh-6-streaming-chat-plan.md` — completed (95% — pending browser sign-off)
+- `docs/plans/suh-7-retrieval-plan.md` — completed (100%)
