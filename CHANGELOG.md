@@ -99,6 +99,19 @@ Naming convention: `{product}-{topic}.md` (e.g. `pura-3-troubleshooting.md`).
   - Off-topic deflection preserved from CAP-3.S-1
   - Validated: **10/10 queries grounded** in KB content (gate ≥8/10 ✅); no hallucination observed
 
+#### Conversation Memory (CAP-3.S-3 — SUH-11)
+
+- `backend/main.py` — history now passed to Groq with every request
+  - New `HistoryItem` Pydantic model: `{ role: "user"|"assistant", content: str }`
+  - `ChatRequest.history: list[HistoryItem] | None = None` — optional; single-turn curl requests unchanged
+  - `MAX_HISTORY_TURNS = 6` constant caps token growth (Groq free tier: 6,000 tokens/min)
+  - Groq messages list: `[system_with_rag_context, ...last_6_history_turns, current_user_message]`
+
+- `frontend/src/hooks/useChat.ts` — sends accumulated history with every `POST /chat`
+  - History snapshot captured **before** appending new user message to state (prevents double-sending current turn)
+  - Maps `"agent"` → `"assistant"` for Groq compatibility; strips internal `id` field; filters empty placeholders
+  - Validated: 5-turn test — device context carried correctly across all turns (e.g. "How long does its battery last?" resolved to Pura Car Pro without re-stating the device)
+
 #### Plans
 
 - `docs/plans/suh-5-ingest-plan.md` — completed (100%)
@@ -106,3 +119,4 @@ Naming convention: `{product}-{topic}.md` (e.g. `pura-3-troubleshooting.md`).
 - `docs/plans/suh-7-retrieval-plan.md` — completed (100%)
 - `docs/plans/suh-9-groq-streaming-plan.md` — completed (95% — pending browser sign-off)
 - `docs/plans/suh-10-rag-grounding-plan.md` — completed (95% — pending browser sign-off)
+- `docs/plans/suh-11-conversation-memory-plan.md` — completed (95% — pending browser sign-off)
