@@ -63,11 +63,6 @@ Naming convention: `{product}-{topic}.md` (e.g. `pura-3-troubleshooting.md`).
   - Reads response body as `ReadableStream`; updates agent bubble in-place per chunk (no new bubble per token)
   - On error: sets agent message to `"Something went wrong. Please try again."`
 
-- `backend/main.py` — FastAPI server (mock phase; replaced in CAP-3.S-1)
-  - `POST /chat` accepts `{ message: string }`, streams a fixed response word-by-word at ~40ms/token
-  - CORS open for `http://localhost:5173`
-  - Run: `uvicorn main:app --reload`
-
 - `backend/requirements.txt` — added `fastapi`, `uvicorn[standard]`
 
 #### RAG Retrieval Layer (CAP-1.S-2 — SUH-7)
@@ -77,13 +72,37 @@ Naming convention: `{product}-{topic}.md` (e.g. `pura-3-troubleshooting.md`).
   - Queries `pura_help_center` ChromaDB collection directly via `collection.query()`
   - Returns `list[dict]` with `text`, `article_title`, `source_filename`, `distance`
   - Returns `[]` for empty or whitespace-only queries — no exception
-  - Off-topic queries return low-relevance results (dist ≈ 1.17) without crashing
   - Model and ChromaDB client are module-level singletons — loaded once at import, not per call
   - Runnable standalone: `python retrieval.py "How do I set up my Pura Mini?"`
   - Validated: **8/10 accuracy** (gate ≥7/10 ✅), **max 301ms latency** (gate <500ms ✅), avg 90ms
+
+#### Groq LLM Streaming (CAP-3.S-1 — SUH-9)
+
+- `backend/main.py` — FastAPI server, now live (replaces mock from SUH-6)
+  - `POST /chat` streams real responses from Groq `llama-3.3-70b-versatile` via `AsyncGroq`
+  - System prompt: Pura brand identity + on-topic guard
+  - Fails fast at startup if `GROQ_API_KEY` is missing
+  - `groq.APIError` caught in the stream generator — yields user-facing message, never a raw 500
+  - CORS open for `http://localhost:5173`
+  - Run: `uvicorn main:app --reload`
+
+- `backend/requirements.txt` — added `groq`
+
+- `backend/.env.example` — added `GROQ_API_KEY=your_key_here`
+
+#### RAG Grounding (CAP-3.S-2 — SUH-10)
+
+- `backend/main.py` — updated to inject Help Center context before every Groq call
+  - `retrieve(message, top_k=3)` called before Groq; chunks with `distance ≥ 1.0` filtered out
+  - `build_system_prompt(chunks)` injects a `### CONTEXT ### ... ### END CONTEXT ###` block with retrieved chunk texts
+  - LLM instructed to answer only from context; falls back to escalation offer when context is empty
+  - Off-topic deflection preserved from CAP-3.S-1
+  - Validated: **10/10 queries grounded** in KB content (gate ≥8/10 ✅); no hallucination observed
 
 #### Plans
 
 - `docs/plans/suh-5-ingest-plan.md` — completed (100%)
 - `docs/plans/suh-6-streaming-chat-plan.md` — completed (95% — pending browser sign-off)
 - `docs/plans/suh-7-retrieval-plan.md` — completed (100%)
+- `docs/plans/suh-9-groq-streaming-plan.md` — completed (95% — pending browser sign-off)
+- `docs/plans/suh-10-rag-grounding-plan.md` — completed (95% — pending browser sign-off)
