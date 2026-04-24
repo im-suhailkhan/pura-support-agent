@@ -112,7 +112,9 @@ def build_system_prompt(chunks: list[dict]) -> str:
         + "Answer the customer's question using ONLY the information in the CONTEXT above. "
         + "If the context does not contain enough information to answer confidently, say: "
         + "\"I don't have information on that — would you like me to connect you with the support team?\" "
-        + "Do not use knowledge outside the provided context."
+        + "Do not use knowledge outside the provided context. "
+        + "IMPORTANT: If the context contains image links in markdown format (e.g. ![alt](url)), "
+        + "include them verbatim inline with the relevant step — do not omit or paraphrase them."
     )
 
 

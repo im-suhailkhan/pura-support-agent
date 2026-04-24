@@ -11,9 +11,8 @@ backend/**/__pycache__/
 backend/**/*.pyc
 backend/.env
 
-# Backend — generated data (large binaries, added locally)
+# Backend — generated data (large binary vector store, rebuilt via ingest.py)
 backend/data/chroma/
-backend/data/help_center/
 
 # Frontend — dependencies and build output
 frontend/node_modules/
